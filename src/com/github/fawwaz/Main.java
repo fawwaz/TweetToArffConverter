@@ -16,6 +16,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -38,33 +39,59 @@ public class Main {
     }
     
     static class Converter{
-        HashSet<String> POSTag;
         Twokenize twokenizer;
         //ArrayList<String> tokens;
         Connection connection;
         PreparedStatement preparedstatement;
         ResultSet resultset;
         
+        // For storing attribute value
+        HashSet<String> words;
+        HashSet<String> postags;
+        HashSet<String> boolval;
+        HashSet<String> labels;
+        
+        public static final String start_token = "<START>";
+        public static final String end_token = "<END>";
+        
+        public PrintWriter writer;
+        
         public Converter(){
-            POSTag = new HashSet<>();
             twokenizer = new Twokenize();
+            words = new HashSet<>();
+            postags = new HashSet<>();
+            boolval = new HashSet<>();
+            labels = new HashSet<>();
+            
+            words.add(start_token);
+            words.add(end_token);
+            
+            boolval.add("YES");
+            boolval.add("NO");
+            
         }
         
         public void doConvertion() throws IOException{
             // setup
             //String filename = "E:\\S2\\TA\\MyConverter\\test";
             String filename = "test";
-            PrintWriter writer = new PrintWriter(new FileWriter(filename));
+            writer = new PrintWriter(new FileWriter(filename));
+            writer.write("\"token\",\"prev_word\",\"next_word\",\"tag\",\"prev_tag\",\"next_tag\",\"is_number\",\"is_punctuation\",\"is_place_directive\",\"is_url\",\"is_twitter_account\",\"is_hashtag\",\"is_month_name\",\"is_gazeteer\",\"label\"");
             // write header first.. 
             
             // Select from db.
-            ArrayList<String> tweets = selectTweet();
-            for (int i = 0; i < tweets.size(); i++) {
-                String tobewriten = parseTweet(tweets.get(i));
-                writer.write(tobewriten);
-            }
+//            ArrayList<String> tweets = selectTweet();
+//            for (int i = 0; i < tweets.size(); i++) {
+//                String tobewriten = parseTweet(tweets.get(i));
+//                writer.write(tobewriten);
+//            }
+            // put arff header in bottom but next to be moved to top..
+            writer.write(parseTweet());
+            //writer.write(getArffHeader());
+            
             writer.close();
             // write to external file
+            
         }
         
         private ArrayList<String> selectTweet(){
@@ -81,45 +108,121 @@ public class Main {
             return tweets;
         }
         
-        public String parseTweet(String tweet){
-            ArrayList<String> tokens = new ArrayList<>();
-            System.out.println("Parsing tweet "+tweet);
-            List<String> tokenizeds = twokenizer.tokenizeRawTweetText(tweet);
-            for (String tokenized : tokenizeds) {
-                tokens.add(tokenized);
+        private ArrayList<Pair> selectTokenized(){
+            ArrayList<Pair> result = new ArrayList<>();
+            try{
+                preparedstatement = connection.prepareStatement("SELECT token,label2,twitter_tweet_id from anotasi_tweet_final");
+                resultset = preparedstatement.executeQuery();
+                while(resultset.next()){
+                    Pair p = new Pair();
+                    if(resultset.getString("token").equals("'")){
+                        p.token = "_PETIK_";
+                    }else if(resultset.getString("token").equals("\"")){
+                        p.token = "_PETIK_GANDA_";
+                    }else{
+                        p.token = resultset.getString("token");
+                    }
+                    
+                    p.label = resultset.getString("label2");
+                    labels.add(p.label);
+                    words.add(p.token);
+                    p.tweet_id = resultset.getLong("twitter_tweet_id");
+                    result.add(p);
+                }
+            }catch(SQLException e){
+                e.printStackTrace();
             }
+            
+            for (int i = 0; i < result.size(); i++) {
+                if(i==0){
+                    result.get(i).isfirst = true;
+                }else if(i==result.size()-1){
+                    result.get(i).islast = true;
+                }else{
+                    if(!result.get(i).tweet_id.equals(result.get(i+1).tweet_id)){
+                        result.get(i).islast = true;
+                    }
+                    if(!result.get(i).tweet_id.equals(result.get(i-1).tweet_id)){
+                        result.get(i).isfirst = true;
+                    }
+                }
+            }
+            
+            return result;
+        }
+        
+        private String getArffHeader(){
+            String _words = getStringSet(words);
+            String _postags = getStringSet(postags);
+            String _boolval = getStringSet(boolval);
+            String _labels = getStringSet(labels);
+            StringBuffer sb = new StringBuffer();
+            sb.append("@relation Tweets\n");
+            sb.append("\n");
+            sb.append("@attribute current_word "+_words+ "\n");
+            sb.append("@attribute prev_word " +_words+ "\n" );
+            sb.append("@attribute next_word " +_words+ "\n");
+            sb.append("@attribute pos_tag "+_postags+ "\n" );
+            sb.append("@attribute prev_pos_tag "+_postags+ "\n");
+            sb.append("@attribute next_pos_tag "+_postags+ "\n");
+            sb.append("@attribute is_number " +_boolval + "\n" );
+            sb.append("@attribute is_punctuation " +_boolval + "\n");
+            sb.append("@attribute is_place_directive " +_boolval + "\n");
+            sb.append("@attribute is_url " +_boolval + "\n");
+            sb.append("@attribute is_twitter_account " +_boolval + "\n");
+            sb.append("@attribute is_hashtag " +_boolval + "\n");
+            sb.append("@attribute is_month_name " +_boolval + "\n");
+            sb.append("@attribute is_gazeteer " +_boolval + "\n");
+            sb.append("@attribute label " +_labels + "\n");
+            sb.append("\n");
+            sb.append("@data");
+            return sb.toString();
+        }
+        
+        public String parseTweet(){
+            ArrayList<Pair> tokenizeds = selectTokenized();
             // Harus langsung di write agar token startnya bisa dapet..
             StringBuffer sb = new StringBuffer();
-            for (int i = 0; i < tokens.size(); i++) {
-                String token = tokens.get(i);
-                sb.append("'"+token+"'");
+            for (int i = 0; i < tokenizeds.size(); i++) {
+                //'token','prev_word','next_word','tag','prev_tag','next_tag','is_number','is_punctuation','is_place_directive','is_url','is_twitter_account','is_hashtag','is_month_name','is_gazeteer','label'
+                String token = tokenizeds.get(i).token;
+                sb.append("\""+token+"\"");
                 sb.append(",");
-                sb.append("'"+getPreviousWord(i, tokens)+"'");
+                sb.append("\""+getPreviousWord(i, tokenizeds)+"\"");
                 sb.append(",");
-                sb.append("'"+getNextWord(i, tokens)+"'");
+                sb.append("\""+getNextWord(i, tokenizeds)+"\"");
                 sb.append(",");
-                sb.append("'"+getPOSTag(token)+"'");
+                sb.append("\""+getPOSTag(token)+"\"");
                 sb.append(",");
-                sb.append("'"+getPreviousTag(i,tokens)+"'");
+                sb.append("\""+getPreviousTag(i, tokenizeds)+"\"");
                 sb.append(",");
-                sb.append("'"+getNextTag(i,tokens)+"'");
+                sb.append("\""+getNextTag(i,tokenizeds)+"\"");
                 sb.append(",");
-                sb.append("'"+getNumberFeature(token)+"'");
+                sb.append("\""+getNumberFeature(token)+"\"");
                 sb.append(",");
-                sb.append("'"+getPunctuationFeature(token)+"'");
+                sb.append("\""+getPunctuationFeature(token)+"\"");
                 sb.append(",");
-                sb.append("'"+getPlaceDirectiveFeature(token)+"'");
+                sb.append("\""+getPlaceDirectiveFeature(token)+"\"");
                 sb.append(",");
-                sb.append("'"+getURLFeature(token)+"'");
+                sb.append("\""+getURLFeature(token)+"\"");
                 sb.append(",");
-                sb.append("'"+getMentionFeature(token)+"'");
+                sb.append("\""+getMentionFeature(token)+"\"");
                 sb.append(",");
-                sb.append("'"+getHashtagFeature(token)+"'");
+                sb.append("\""+getHashtagFeature(token)+"\"");
                 sb.append(",");
-                sb.append("'"+getMonthFeature(token)+"'");
+                sb.append("\""+getMonthFeature(token)+"\"");
                 sb.append(",");
-                sb.append("'"+getGazeteer(token)+"'");
+                sb.append("\""+getGazeteer(token)+"\"");
+                sb.append(",");
+                sb.append("\""+tokenizeds.get(i).label+"\"");
+                /**/
                 sb.append("\n");
+                
+                if(i%100==0){
+                    System.out.println("i :"+i);
+                    writer.write(sb.toString());
+                    sb = new StringBuffer();
+                }
             }
             return sb.toString();
         }
@@ -266,59 +369,82 @@ public class Main {
                 preparedstatement.setString(1, token.toLowerCase());
                 resultset = preparedstatement.executeQuery();
                 if(resultset.next()){
+                    postags.add(resultset.getString("tipe_katadasar"));
                     return resultset.getString("tipe_katadasar");
                 }else{
                     if (token.matches("\\bke\\w+an\\b|\\bpe\\w+an\\b|\\bpe\\w+\\b|\\b\\w+an\\b|\\bke\\w+\\b|\\b\\w+at\\b|\\b\\w+in\\b")) {
+                        postags.add("Nomina");
                         return "Nomina";
                     } else if (token.matches("\\bme\\w+\\b|\\bber\\w+\\b|\\b\\w+kan\\b|\\bdi\\w+\\b|\\bter\\w+\\b|\\b\\w+i\\b")) {
+                        postags.add("Verba");
                         return "Verba";
                     } else if (token.matches("\\byuk\\b|\\bmari\\b|\\bayo\\b|\\beh\\b|\\bhai\\b")) {
+                        postags.add("Interjeksi");
                         return "Interjeksi";
                     } else {
-                        return null;
+                        postags.add("_NULL_");
+                        return "_NULL_";
                     }
                 }
             }catch(Exception e){
                 e.printStackTrace();
                 System.out.println("[ERROR] connecting to database to retireve tipe katadasar (pos tag)");
             }
-            return null;
+            return "_NULL_";
         }
         
-        private String getPreviousWord(int index,ArrayList<String> tokens){
-            if(index == 0){
-                return "<START>";
+        private String getPreviousWord(int index,ArrayList<Pair> tokens){
+            if(tokens.get(index).isfirst){
+                return start_token;
             }else{
-                return tokens.get(index-1);
+                return tokens.get(index-1).token;
             }
         }
         
-        private String getPreviousTag(int index,ArrayList<String> tokens){
-            if(index == 0){
-                return null;
-            }else{
-                return getPOSTag(tokens.get(index-1));
+        private String getPreviousTag(int index,ArrayList<Pair> tokens){
+            if (tokens.get(index).isfirst) {
+                return "_NULL_";
+            } else {
+                return getPOSTag(tokens.get(index - 1).token);
             }
         }
         
-        private String getNextWord(int index,ArrayList<String> tokens){
-            if(index == tokens.size() - 1){
-                return "<END>";
+        private String getNextWord(int index,ArrayList<Pair> tokens){
+            if(tokens.get(index).islast){
+                return end_token;
             }else{
-                return tokens.get(index+1);
+                return tokens.get(index+1).token;
             }
         }
         
-        private String getNextTag(int index,ArrayList<String> tokens){
-            if(index == tokens.size() - 1){
-                return null;
+        private String getNextTag(int index,ArrayList<Pair> tokens){
+            if(tokens.get(index).islast){
+                return "_NULL_";
             }else{
-                return getPOSTag(tokens.get(index+1));
+                return getPOSTag(tokens.get(index+1).token);
             }
         }
         
+        private String getStringSet(HashSet<String> set){
+            StringBuffer sb = new StringBuffer();
+            sb.append("{");
+            Iterator iterator = set.iterator();
+            while(iterator.hasNext()){
+                sb.append("'"+iterator.next()+"',");
+            }
+            sb.deleteCharAt(sb.length()-1); // remove last ,
+            sb.append("}");
+            return sb.toString();
+        }
         
-
+        public class Pair{
+            public Long tweet_id;
+            public String token;
+            public String label;
+            public boolean isfirst;
+            public boolean islast;
+        }
+        
     }
     
 }
