@@ -1,0 +1,66 @@
+=== Run information ===
+
+Scheme:weka.classifiers.functions.LibSVM -S 0 -K 2 -D 3 -G 0.0 -R 0.0 -N 0.5 -M 40.0 -C 1.0 -E 0.001 -P 0.1 -seed 1
+Relation:     testlag
+Instances:    13317
+Attributes:   15
+              token
+              prev_word
+              next_word
+              tag
+              prev_tag
+              next_tag
+              is_number
+              is_punctuation
+              is_place_directive
+              is_url
+              is_twitter_account
+              is_hashtag
+              is_month_name
+              is_gazeteer
+              label
+Test mode:10-fold cross-validation
+
+=== Classifier model (full training set) ===
+
+LibSVM wrapper, original code by Yasser EL-Manzalawy (= WLSVM)
+
+Time taken to build model: 104.26 seconds
+
+=== Stratified cross-validation ===
+=== Summary ===
+
+Correctly Classified Instances        5739               43.0953 %
+Incorrectly Classified Instances      7578               56.9047 %
+Kappa statistic                          0     
+Mean absolute error                      0.1423
+Root mean squared error                  0.3772
+Relative absolute error                 75.0616 %
+Root relative squared error            122.531  %
+Total Number of Instances            13317     
+
+=== Detailed Accuracy By Class ===
+
+               TP Rate   FP Rate   Precision   Recall  F-Measure   ROC Area  Class
+                 0         0          0         0         0          0.5      i-name
+                 0         0          0         0         0          0.5      bonus
+                 1         1          0.431     1         0.602      0.5      other
+                 0         0          0         0         0          0.5      i-place
+                 0         0          0         0         0          0.5      contact
+                 0         0          0         0         0          0.5      i-time
+                 0         0          0         0         0          0.5      i-info
+                 0         0          0         0         0          0.5      artist
+Weighted Avg.    0.431     0.431      0.186     0.431     0.26       0.5  
+
+=== Confusion Matrix ===
+
+    a    b    c    d    e    f    g    h   <-- classified as
+    0    0 1554    0    0    0    0    0 |    a = i-name
+    0    0  804    0    0    0    0    0 |    b = bonus
+    0    0 5739    0    0    0    0    0 |    c = other
+    0    0 1078    0    0    0    0    0 |    d = i-place
+    0    0 1542    0    0    0    0    0 |    e = contact
+    0    0 1605    0    0    0    0    0 |    f = i-time
+    0    0  108    0    0    0    0    0 |    g = i-info
+    0    0  887    0    0    0    0    0 |    h = artist
+
